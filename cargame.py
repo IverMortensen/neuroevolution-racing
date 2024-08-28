@@ -2,20 +2,7 @@ import pygame
 import time
 import math
 from utils import scale_image, blit_rotate_center
-import neat
 pygame.font.init()
-
-
-# Load configuration file
-config_path = "./neat-config.txt"
-config = neat.config.Config(
-    neat.DefaultGenome,
-    neat.DefaultReproduction,
-    neat.DefaultSpeciesSet,
-    neat.DefaultStagnation,
-    config_path
-)
-
 
 scaling_factor = 1
 
@@ -52,7 +39,7 @@ class AbstractCar:
         self.rotation_vel = rotation_vel
         self.angle = 0
         self.x, self.y = self.START_POS
-        self.acceleration = 0.8
+        self.acceleration = 0.4
 
     def rotate(self, left=False, right=False):
         if left:
@@ -175,9 +162,6 @@ def draw(win, images, player_car: PlayerCar):
 
     player_car.draw(win)
 
-    # for point in PATH:
-    #     pygame.draw.circle(win, (255, 0, 0), point, 5)
-
     # Update and draw sensors
     player_car.update_sensors([TRACK_BORDER_MASK])
     player_car.draw_sensors(WIN)
@@ -219,63 +203,26 @@ def handle_collision(player_car: PlayerCar):
             player_car.reset()
 
 
-def eval_genomes(genomes, config):
-    for genome_id, genome in genomes:
-        net = neat.nn.FeedForwardNetwork.create(genome, config)
-        player_car = PlayerCar(8, 4)
-        fitness = run_simulation(player_car, net)
-        genome.fitness = fitness
-
-
+run = True
+clock = pygame.time.Clock()
 images = [(GRASS, (0, 0)), (TRACK, (0, 0)),
           (FINISH, FINISH_POSITION), (TRACK_BORDER, (0, 0))]
+player_car = PlayerCar(4, 4)
 
-def run_simulation(player_car: PlayerCar, net):
-    clock = pygame.time.Clock()
-    run = True
-    fitness = 0
+while run:
+    clock.tick(FPS)
 
-    while run:
-        clock.tick(FPS)
+    draw(WIN, images, player_car)
 
-        # Get sensor data and feed it to the neural network
-        player_car.update_sensors([TRACK_BORDER_MASK])
-        output = net.activate(player_car.sensor_data)
-
-        # Use the network output to control the car
-        steer = output[0]
-
-        if steer > 0.5:
-            player_car.rotate(right=True)
-        elif steer < -0.5:
-            player_car.rotate(left=True)
-
-        player_car.move_forward()
-
-        draw(WIN, images, player_car)
-
-        # Check for collision or finish line
-        if player_car.collide(TRACK_BORDER_MASK) is not None:
-            fitness -= 1
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
             run = False
-        else:
-            fitness += 1  # Increase fitness for surviving longer
+            break
 
-        # Add any other conditions to end the simulation
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
+    move_player(player_car)
 
-    return fitness
+    handle_collision(player_car)
 
-p = neat.Population(config)
 
-p.add_reporter(neat.StdOutReporter(True))
-stats = neat.StatisticsReporter()
-p.add_reporter(stats)
-
-winner = p.run(eval_genomes, n=50)  # Run for 50 generations or until a solution is found
-
-print(f'Best genome:\n{winner}')
+pygame.quit()
 
