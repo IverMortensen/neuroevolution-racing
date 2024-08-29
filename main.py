@@ -16,8 +16,7 @@ config = neat.config.Config(
     config_path
 )
 
-
-scaling_factor = 1
+scaling_factor = 0.85
 
 GRASS = scale_image(pygame.image.load("imgs/grass.jpg"), 2.5 * scaling_factor)
 TRACK = scale_image(pygame.image.load("imgs/track.png"), 0.9 * scaling_factor)
@@ -28,10 +27,16 @@ TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
 FINISH = scale_image(pygame.image.load("imgs/finish.png"), scaling_factor)
 FINISH_MASK = pygame.mask.from_surface(FINISH)
 
-START_POSITION = (180 * scaling_factor, 200 * scaling_factor)
+# Normal start pos = x: 170 y: 200
+START_POSITION = (170 * scaling_factor, 200 * scaling_factor)
 FINISH_POSITION = (130 * scaling_factor, 250 * scaling_factor)
 
-RED_CAR = scale_image(pygame.image.load("imgs/red-car.png"), 0.55 * scaling_factor)
+CARS = [
+scale_image(pygame.image.load("imgs/red-car.png"), 0.4 * scaling_factor),
+scale_image(pygame.image.load("imgs/green-car.png"), 0.4 * scaling_factor),
+scale_image(pygame.image.load("imgs/grey-car.png"), 0.4 * scaling_factor),
+scale_image(pygame.image.load("imgs/purple-car.png"), 0.4 * scaling_factor),
+]
 
 WIDTH, HEIGHT = TRACK.get_width(), TRACK.get_height()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -45,14 +50,14 @@ PATH = [(175, 119), (110, 70), (56, 133), (70, 481), (318, 731), (404, 680), (41
         (734, 399), (611, 357), (409, 343), (433, 257), (697, 258), (738, 123), (581, 71), (303, 78), (275, 377), (176, 388), (178, 260)]
 
 class AbstractCar:
-    def __init__(self, max_vel, rotation_vel):
-        self.img = self.IMG
+    def __init__(self, max_vel, rotation_vel, img):
+        self.img = img
         self.max_vel = max_vel
         self.vel = 0
         self.rotation_vel = rotation_vel
         self.angle = 0
         self.x, self.y = self.START_POS
-        self.acceleration = 0.8
+        self.acceleration = 1
 
     def rotate(self, left=False, right=False):
         if left:
@@ -64,7 +69,7 @@ class AbstractCar:
         blit_rotate_center(win, self.img, (self.x, self.y), self.angle)
 
     def move_forward(self):
-        self.vel = min(self.vel + self.acceleration, self.max_vel)
+        self.vel = self.max_vel
         self.move()
 
     def move_backward(self):
@@ -92,11 +97,10 @@ class AbstractCar:
 
 
 class PlayerCar(AbstractCar):
-    IMG = RED_CAR
     START_POS = START_POSITION
 
-    def __init__(self, max_vel, rotation_vel):
-        super().__init__(max_vel, rotation_vel)
+    def __init__(self, max_vel, rotation_vel, id):
+        super().__init__(max_vel, rotation_vel, CARS[id % len(CARS)])
         self.sensor_length = 150  # Length of the sensor rays
         self.num_sensors = 5  # Number of sensors (rays)
         self.sensors = []
@@ -219,55 +223,64 @@ def handle_collision(player_car: PlayerCar):
             player_car.reset()
 
 
-def eval_genomes(genomes, config):
-    for genome_id, genome in genomes:
-        net = neat.nn.FeedForwardNetwork.create(genome, config)
-        player_car = PlayerCar(8, 4)
-        fitness = run_simulation(player_car, net)
-        genome.fitness = fitness
-
-
 images = [(GRASS, (0, 0)), (TRACK, (0, 0)),
           (FINISH, FINISH_POSITION), (TRACK_BORDER, (0, 0))]
 
-def run_simulation(player_car: PlayerCar, net):
+def eval_genomes(genomes, config):
+    # Initialize the game window
     clock = pygame.time.Clock()
+    cars = []
+
+    # Create a PlayerCar for each genome
+    for genome_id, genome in genomes:
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        car = PlayerCar(10, 12, genome_id)  # Create a car instance
+        genome.fitness = 0
+        cars.append((car, net, genome))  # Store car, its network, and genome
+
     run = True
-    fitness = 0
+    while run and len(cars) > 0:
+        # clock.tick(FPS)
+        WIN.fill((255, 255, 255))  # Clear screen with white background
 
-    while run:
-        clock.tick(FPS)
+        # Draw background images
+        for img, pos in images:
+            WIN.blit(img, pos)
 
-        # Get sensor data and feed it to the neural network
-        player_car.update_sensors([TRACK_BORDER_MASK])
-        output = net.activate(player_car.sensor_data)
+        # Update and draw each car
+        for car, net, genome in cars:
+            if car.collide(TRACK_BORDER_MASK) is not None:
+                # genome.fitness -= 1  # Penalize for collision
+                cars.remove((car, net, genome))  # Remove crashed car
+            else:
+                # Update sensors and feed sensor data to the neural network
+                car.update_sensors([TRACK_BORDER_MASK])
+                output = net.activate(car.sensor_data)
 
-        # Use the network output to control the car
-        steer = output[0]
+                # Control car based on network output
+                steerLeft, steerRight = output[0], output[1]
+                if steerRight > 0.5 or steerRight > 0.5:
+                    if steerRight > steerLeft:
+                        car.rotate(right=True)
+                    else:
+                        car.rotate(left=True)
 
-        if steer > 0.5:
-            player_car.rotate(right=True)
-        elif steer < -0.5:
-            player_car.rotate(left=True)
+                car.move_forward()
 
-        player_car.move_forward()
+                # car.draw_sensors(WIN)
 
-        draw(WIN, images, player_car)
+                car.draw(WIN)
 
-        # Check for collision or finish line
-        if player_car.collide(TRACK_BORDER_MASK) is not None:
-            fitness -= 1
-            run = False
-        else:
-            fitness += 1  # Increase fitness for surviving longer
+                # Increase fitness for moving forward
+                genome.fitness += 0.1
 
-        # Add any other conditions to end the simulation
+        pygame.display.update()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
 
-    return fitness
 
 p = neat.Population(config)
 
@@ -275,7 +288,7 @@ p.add_reporter(neat.StdOutReporter(True))
 stats = neat.StatisticsReporter()
 p.add_reporter(stats)
 
-winner = p.run(eval_genomes, n=50)  # Run for 50 generations or until a solution is found
+winner = p.run(eval_genomes, n=1000)
 
 print(f'Best genome:\n{winner}')
 
