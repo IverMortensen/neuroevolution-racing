@@ -1,2 +1,2 @@
 # Car-Game
-Simple 2D car game
+Neuroevolution of augmenting topologies (NEAT) agent learning a simple 2D car game.
