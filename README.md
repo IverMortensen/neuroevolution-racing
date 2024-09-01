@@ -7,11 +7,9 @@ Neuroevolution of augmenting topologies (NEAT) agent learning a simple 2D car ga
   <img src="imgs/preview/ray-casting.png" alt="ray" height="142">
 </p>
 
+All the vizuals are hand drawn. 👨‍🎨
+
 # How-To-Run
-Run the neural agent training:
+Run the training:
 
   python3 main.py
-
-Try out the game yourself:
-
-  python3 cargame.py
