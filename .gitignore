@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 .DS_Store
+best_genome
+best_genome.png
 
 # C extensions
 *.so

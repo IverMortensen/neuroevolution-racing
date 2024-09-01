@@ -1,8 +1,11 @@
 import pygame
-import time
 import math
 from utils import scale_image, blit_rotate_center
 import neat
+import graphviz
+import matplotlib.pyplot as plt
+from neat.graphs import feed_forward_layers
+import visualize
 pygame.font.init()
 
 
@@ -18,25 +21,31 @@ config = neat.config.Config(
 
 scaling_factor = 0.85
 
-GRASS = scale_image(pygame.image.load("imgs/grass.jpg"), 2.5 * scaling_factor)
-TRACK = scale_image(pygame.image.load("imgs/track.png"), 0.9 * scaling_factor)
+""" Map 1 """
+# GRASS = scale_image(pygame.image.load("imgs/grass.jpg"), 2.5 * scaling_factor)
+# TRACK = scale_image(pygame.image.load("imgs/track.png"), 0.9 * scaling_factor)
+# TRACK_BORDER = scale_image(pygame.image.load("imgs/track-border.png"), 0.9 * scaling_factor)
+# FINISH = scale_image(pygame.image.load("imgs/finish.png"), scaling_factor)
+# FINISH_MASK = pygame.mask.from_surface(FINISH)
+# RACE_CAR = scale_image(pygame.image.load("imgs/race-car2.png"), 0.07 * scaling_factor)
+# images = [(GRASS, (0, 0)), (TRACK, (0, 0)),
+#           (FINISH, FINISH_POSITION), (TRACK_BORDER, (0, 0))]
+# START_POSITION = (170 * scaling_factor, 200 * scaling_factor)
+# START_ANGLE = 0
+# FINISH_POSITION = (130 * scaling_factor, 250 * scaling_factor)
 
-TRACK_BORDER = scale_image(pygame.image.load("imgs/track-border.png"), 0.9 * scaling_factor)
-TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
 
-FINISH = scale_image(pygame.image.load("imgs/finish.png"), scaling_factor)
-FINISH_MASK = pygame.mask.from_surface(FINISH)
-
-# Normal start pos = x: 170 y: 200
-START_POSITION = (170 * scaling_factor, 200 * scaling_factor)
+""" Map 2 """
+TRACK = scale_image(pygame.image.load("imgs/track.jpg"), 0.718 * scaling_factor)
+TRACK_BORDER = scale_image(pygame.image.load("imgs/border.png"), 2 * scaling_factor)
+RACE_CAR = scale_image(pygame.image.load("imgs/race-car.png"), 0.11 * scaling_factor)
+images = [(TRACK, (0, 0))]
+START_POSITION = (900 * scaling_factor, 50 * scaling_factor)
+START_ANGLE = 90
 FINISH_POSITION = (130 * scaling_factor, 250 * scaling_factor)
 
-CARS = [
-scale_image(pygame.image.load("imgs/red-car.png"), 0.4 * scaling_factor),
-scale_image(pygame.image.load("imgs/green-car.png"), 0.4 * scaling_factor),
-scale_image(pygame.image.load("imgs/grey-car.png"), 0.4 * scaling_factor),
-scale_image(pygame.image.load("imgs/purple-car.png"), 0.4 * scaling_factor),
-]
+
+TRACK_BORDER_MASK = pygame.mask.from_surface(TRACK_BORDER)
 
 WIDTH, HEIGHT = TRACK.get_width(), TRACK.get_height()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -44,10 +53,7 @@ pygame.display.set_caption("Racing Game!")
 
 MAIN_FONT = pygame.font.SysFont("comicsans", 44)
 
-FPS = 60
-
-PATH = [(175, 119), (110, 70), (56, 133), (70, 481), (318, 731), (404, 680), (418, 521), (507, 475), (600, 551), (613, 715), (736, 713),
-        (734, 399), (611, 357), (409, 343), (433, 257), (697, 258), (738, 123), (581, 71), (303, 78), (275, 377), (176, 388), (178, 260)]
+FPS = 100
 
 class AbstractCar:
     def __init__(self, max_vel, rotation_vel, img):
@@ -55,9 +61,30 @@ class AbstractCar:
         self.max_vel = max_vel
         self.vel = 0
         self.rotation_vel = rotation_vel
-        self.angle = 0
+        self.angle = START_ANGLE
         self.x, self.y = self.START_POS
         self.acceleration = 1
+        self.height = self.img.get_height()
+        self.width = self.img.get_width()
+        self.hitbox, self.hitbox_radius = self.create_hitbox()
+
+    def create_hitbox(self):
+        """ Create a circle hitbox for the car. """
+        # Define the circle parameters
+        circle_radius = self.width / 2
+        circle_center = (circle_radius, circle_radius)
+        circle_color = (255, 255, 255, 255)  # White color, fully opaque
+        surface_size = (self.width, self.width)
+
+        # Create a surface for the circle
+        circle_surface = pygame.Surface(surface_size, pygame.SRCALPHA)
+        circle_surface.fill((0,0,0,0))  # Fill with transparent color
+
+        # Draw the circle on the surface
+        pygame.draw.circle(circle_surface, circle_color, circle_center, circle_radius)
+
+        # Create a mask from the surface
+        return pygame.mask.from_surface(circle_surface), circle_radius
 
     def rotate(self, left=False, right=False):
         if left:
@@ -84,15 +111,18 @@ class AbstractCar:
         self.y -= vertical
         self.x -= horizontal
 
-    def collide(self, mask, x=0, y=0):
-        car_mask = pygame.mask.from_surface(self.img)
-        offset = (int(self.x - x), int(self.y - y))
-        poi = mask.overlap(car_mask, offset)
+    def collide(self, mask):
+
+        x = self.x + (self.width / 2) - self.hitbox_radius
+        y = self.y + (self.height / 2) - self.hitbox_radius
+
+        poi = mask.overlap(self.hitbox, (int(x), int(y)))
+
         return poi
 
     def reset(self):
         self.x, self.y = self.START_POS
-        self.angle = 0
+        self.angle = START_ANGLE
         self.vel = 0
 
 
@@ -100,13 +130,11 @@ class PlayerCar(AbstractCar):
     START_POS = START_POSITION
 
     def __init__(self, max_vel, rotation_vel, id):
-        super().__init__(max_vel, rotation_vel, CARS[id % len(CARS)])
+        super().__init__(max_vel, rotation_vel, RACE_CAR)
         self.sensor_length = 150  # Length of the sensor rays
         self.num_sensors = 5  # Number of sensors (rays)
         self.sensors = []
         self.sensor_data = []
-        self.height = self.img.get_height()
-        self.width = self.img.get_width()
 
     def update_sensors(self, obstacles):
         self.sensors.clear()
@@ -154,8 +182,11 @@ class PlayerCar(AbstractCar):
             x = int(x1 + u * (x2 - x1))
             y = int(y1 + u * (y2 - y1))
 
-            if obstacle_mask.get_at((x, y)):
-                return (x, y), math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
+            try:
+                if obstacle_mask.get_at((x, y)):
+                    return (x, y), math.sqrt((x - x1) ** 2 + (y - y1) ** 2)
+            except:
+                pass
 
         return None, self.sensor_length
 
@@ -163,13 +194,9 @@ class PlayerCar(AbstractCar):
         # Draw the sensors for visualization
         for sensor in self.sensors:
             pygame.draw.line(win, (255, 0, 0), (sensor[0], sensor[1]), (sensor[2], sensor[3]), 3)
-
+    
     def reduce_speed(self):
         self.vel = max(self.vel - self.acceleration / 2, 0)
-        self.move()
-
-    def bounce(self):
-        self.vel = -self.vel
         self.move()
 
 
@@ -179,15 +206,9 @@ def draw(win, images, player_car: PlayerCar):
 
     player_car.draw(win)
 
-    # for point in PATH:
-    #     pygame.draw.circle(win, (255, 0, 0), point, 5)
-
     # Update and draw sensors
     player_car.update_sensors([TRACK_BORDER_MASK])
     player_car.draw_sensors(WIN)
-
-    pygame.display.update()
-
 
 def move_player(player_car):
     keys = pygame.key.get_pressed()
@@ -214,22 +235,98 @@ def handle_collision(player_car: PlayerCar):
         player_car.reset()
 
 	# Check if the player has finished
-    player_finish_poi_collide = player_car.collide(
-        FINISH_MASK, *FINISH_POSITION)
-    if player_finish_poi_collide != None:
-        if player_finish_poi_collide[1] == 0:
-            player_car.reset()
-        else:
-            player_car.reset()
+    # player_finish_poi_collide = player_car.collide(
+    #     FINISH_MASK, *FINISH_POSITION)
+    # if player_finish_poi_collide != None:
+    #     if player_finish_poi_collide[1] == 0:
+    #         player_car.reset()
+    #     else:
+    #         player_car.reset()
 
 
-images = [(GRASS, (0, 0)), (TRACK, (0, 0)),
-          (FINISH, FINISH_POSITION), (TRACK_BORDER, (0, 0))]
+def visualize_genome(genome, config, view=False, filename=None, node_names=None, show_disabled=True, prune_unused=False, node_colors=None, fmt='png'):
+    dot = graphviz.Digraph(format=fmt)
+    
+    inputs = set(config.genome_config.input_keys)
+    outputs = set(config.genome_config.output_keys)
+    
+    if node_names is None:
+        # node_names = {}
+        node_names = {-5: 'L ', -4: 'LC', -3: 'C ', -2: 'RC', -1: 'R ', 0: 'L ', 1: 'R '}
+
+    if node_colors is None:
+        node_colors = {}
+    
+    # Input nodes
+    for i, n in enumerate(inputs):
+        name = node_names.get(n, str(n))
+        dot.node(name, _attributes={
+            'shape': 'circle',
+            'style': 'filled',
+            'fillcolor': 'lightgray',
+            'pos': f"-1,{len(inputs) - i}!",
+            'size': '1',
+        })
+
+    # Output nodes
+    for i, n in enumerate(outputs):
+        name = node_names.get(n, str(n))
+        dot.node(name, _attributes={
+            'shape': 'circle',
+            'style': 'filled',
+            'fillcolor': node_colors.get(n, 'lightblue'),
+            'pos': f"10,{len(outputs) - i}!",
+        })
+
+    # Hidden and bias nodes
+    hidden_nodes = set(genome.nodes.keys()) - inputs - outputs
+    layers = feed_forward_layers(config.genome_config.input_keys, config.genome_config.output_keys, genome.connections)
+
+    for i, layer in enumerate(layers):
+        for n in layer:
+            name = node_names.get(n, str(n))
+            if n in hidden_nodes:
+                dot.node(name, _attributes={
+                    'shape': 'circle',
+                    'style': 'filled',
+                    'fillcolor': node_colors.get(n, 'white'),
+                    'pos': f"0,{len(layer) - i}!"
+                })
+
+    # Connections
+    for cg in genome.connections.values():
+        if cg.enabled or show_disabled:
+            input_node, output_node = cg.key
+            style = 'solid' if cg.enabled else 'dotted'
+            dot.edge(node_names.get(input_node, str(input_node)),
+                     node_names.get(output_node, str(output_node)),
+                     _attributes={'style': style})
+
+    # Graph attributes for styling
+    dot.attr(overlap='false', splines='true', rankdir='LR')
+
+    if filename is not None:
+        dot.render(filename, view=view)
+
+    return dot
+
+def visualize_gen(config, genome):
+    node_names = {-5: 'left', -4: 'left-center', -3: 'center', -2: 'right-center', -1: 'right', 0: 'left', 1: 'right'}
+
+    visualize.draw_net(config, genome, True, node_names=node_names, prune_unused=False)
+
+    # visualize.plot_stats(stats, ylog=False, view=True)
+
+    # visualize.plot_species(stats, view=True)
+
 
 def eval_genomes(genomes, config):
     # Initialize the game window
     clock = pygame.time.Clock()
     cars = []
+
+    best_genome = None
+    best_fitness = float('-inf')
 
     # Create a PlayerCar for each genome
     for genome_id, genome in genomes:
@@ -240,7 +337,7 @@ def eval_genomes(genomes, config):
 
     run = True
     while run and len(cars) > 0:
-        # clock.tick(FPS)
+        clock.tick(FPS)
         WIN.fill((255, 255, 255))  # Clear screen with white background
 
         # Draw background images
@@ -274,13 +371,48 @@ def eval_genomes(genomes, config):
                 # Increase fitness for moving forward
                 genome.fitness += 0.1
 
+                # Track the best genome
+                if genome.fitness > best_fitness:
+                    best_fitness = genome.fitness
+                    best_genome = genome
+
         pygame.display.update()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
+    if best_genome is not None:
+        # Visualize the best genome's neural network
+        visualize_genome(best_genome, config, filename="best_genome")
+        # visualize_gen(config, best_genome)
 
+
+def test_mode():
+    run = True
+    clock = pygame.time.Clock()
+
+    player_car = PlayerCar(4, 4, 0)
+
+    while run:
+        clock.tick(FPS)
+
+        draw(WIN, images, player_car)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+                break
+
+        move_player(player_car)
+
+        handle_collision(player_car)
+
+        pygame.display.update()
+
+    pygame.quit()
+
+# test_mode()
 
 p = neat.Population(config)
 
