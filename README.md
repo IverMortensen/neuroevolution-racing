@@ -9,7 +9,17 @@ Neuroevolution of augmenting topologies (NEAT) agent learning a simple 2D car ga
 
 All the vizuals are hand drawn. 👨‍🎨
 
+
+
 # How-To-Run
+
+## Insall the requirements:
+
+    pip install -r requirements.txt
+
+
+## Run the program
+
 Mac & linux:
 
     python3 main.py
