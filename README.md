@@ -7,8 +7,6 @@ Neuroevolution of augmenting topologies (NEAT) agent learning a simple 2D car ga
   <img src="imgs/preview/ray-casting.png" alt="ray" height="142">
 </p>
 
-All the vizuals are hand drawn. 👨‍🎨
-
 
 
 # How-To-Run
