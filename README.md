@@ -1,5 +1,5 @@
-# Car-Game
-Neuroevolution of augmenting topologies (NEAT) agent learning a simple 2D car game.
+# neuroevolution-racing
+Neuroevolution of augmenting topologies (NEAT) agent learning to drive a car around a simple racing track.
 
 <img src="imgs/preview/car-driving.gif" alt="map" width="400">
 <p>
@@ -9,19 +9,13 @@ Neuroevolution of augmenting topologies (NEAT) agent learning a simple 2D car ga
 
 
 
-# How-To-Run
+## How-To-Run
 
-## Insall the requirements:
+### Insall the requirements:
 
     pip install -r requirements.txt
 
 
-## Run the program
-
-Mac & linux:
-
-    python3 main.py
-
-Windows:
+### Run the main.py file:
 
     python main.py
